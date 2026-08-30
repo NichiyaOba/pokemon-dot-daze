@@ -1,0 +1,60 @@
+name: Update Pokémon
+
+on:
+  schedule:
+    # Once a day, shortly after midnight UTC.
+    - cron: "10 0 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+# Only one update may run at a time, otherwise two jobs can race to push.
+concurrency:
+  group: update-pokemon
+  # Never cancel: this job's side effect is a push, and cancelling between
+  # commit and push loses that run's update entirely.
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Render the sprite
+        env:
+          # The default token can read public contributions. To include private
+          # ones, create a PAT with the read:user scope and use it here instead.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          go run ./cmd/pokemon-dot-daze \
+            --user "${{ github.repository_owner }}" \
+            --out assets/pokemon.svg
+
+      - name: Commit the result if it changed
+        run: |
+          # Commit as github-actions[bot], never as the repository owner.
+          # Committing as the owner would add to their own contribution count,
+          # which is the input to this job — the picture would advance itself.
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Stage first: `git diff` alone reports "no change" for an untracked
+          # file, which would silently skip the very first publish.
+          git add assets/pokemon.svg
+
+          if git diff --cached --quiet -- assets/pokemon.svg; then
+            echo "No change; nothing to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: update Pokémon progress"
+          git push
