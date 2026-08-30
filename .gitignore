@@ -1,0 +1,6 @@
+# Build output
+/pokemon-dot-daze
+
+# Test artefacts
+*.out
+coverage.*
